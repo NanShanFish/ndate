@@ -1,3 +1,5 @@
+use ndate::parse_datetime;
+
 fn main() {
-    println!("Hello, world!");
+    println!("Hello ndate");
 }

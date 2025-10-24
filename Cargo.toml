@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chinese-lunisolar-calendar = { version="*" }
+regex = "1"
+lazy_static = "*"
+
