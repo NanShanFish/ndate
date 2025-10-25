@@ -9,7 +9,7 @@ struct Cli {
     /// - Absolute date: "2024-10-25", "24-10-25"
     /// - Relative date: "+1"/"1" (1 day later), "-3" (3 days ago)
     /// - Partial date: "10-25" (month-day, automatically infer the year)
-    #[arg(verbatim_doc_comment)]
+    #[arg(verbatim_doc_comment, allow_hyphen_values = true)]
     date_input: String,
 
     /// Treat the input as a lunar date for processing

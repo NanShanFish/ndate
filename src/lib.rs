@@ -103,7 +103,6 @@ pub fn parse_datetime(s: String, is_lunar: bool, next: bool) -> DateTime<Local> 
             .expect("Duration calculation overflowed");
 
         let (hour, minute) = hour_and_min(caps.get(2), caps.get(3));
-        println!("{},{}", hour, minute);
         result.with_hour(hour)
             .and_then(|dt| dt.with_minute(minute))
             .expect("Invalid time component specified")
