@@ -1,6 +1,10 @@
 [package]
 name = "ndate"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 
 [dependencies]
+chinese-lunisolar-calendar = { version="*" }
+regex = "1"
+lazy_static = "1.5.0"
+clap = { version = "4.4.0", features = ["derive"] }
