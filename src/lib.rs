@@ -31,7 +31,7 @@ fn date_from_ymd_and_hm(
 ) -> DateTime<Local> {
     if is_lunar {
         let lunar_year = LunisolarYear::from_solar_year(SolarYear::from_u16(year as u16))
-            .expect("无效的农历年份");
+            .expect("Invalid lunar year");
         let is_leap_month = match lunar_year.get_leap_lunar_month() {
             Some(leap_month) => leap_month.to_u8() == month as u8,
             None => false,
@@ -41,11 +41,11 @@ fn date_from_ymd_and_hm(
             LunisolarDate::from_lunisolar_year_lunar_month_day(
                 lunar_year,
                 LunarMonth::from_u8_with_leap(month as u8, is_leap_month)
-                .expect("无效的农历月份"),
-                LunarDay::from_u8(day as u8).expect("无效的农历日"))
-            .expect("无效的农历日期");
+                .expect("Invalid lunar month"),
+                LunarDay::from_u8(day as u8).expect("Invalid lunar day"))
+            .expect("Invalid lunar date combination");
         let native_datetime = lunar_date.to_naive_date().and_hms_opt(hour, minute, 0)
-            .expect("无效的小时或分钟");
+            .expect("Invalid hour or minute value");
         let res = Local.from_local_datetime(&native_datetime)
             .single().unwrap();
         if next && res < *now {
@@ -55,9 +55,9 @@ fn date_from_ymd_and_hm(
         }
     } else {
         let res = Local.with_ymd_and_hms(year, month, day, hour, minute, 0)
-            .single().expect("提供的时间或日期无效" );
+            .single().expect("Invalid or out-of-range datetime provided" );
         if next && res < *now {
-            res.with_year(year + 1).expect("无效的时间或日期")
+            res.with_year(year + 1).expect("Year adjustment resulted in invalid datetime")
         } else {
             res
         }
@@ -100,15 +100,15 @@ pub fn parse_datetime(s: String, is_lunar: bool, next: bool) -> DateTime<Local> 
         let mut result = begin_of_today;
         let duration = Duration::days(day_delta);
         result = result.checked_add_signed(duration)
-            .expect("时间计算溢出");
+            .expect("Duration calculation overflowed");
 
         let (hour, minute) = hour_and_min(caps.get(2), caps.get(3));
         println!("{},{}", hour, minute);
         result.with_hour(hour)
             .and_then(|dt| dt.with_minute(minute))
-            .expect("无效的时间")
+            .expect("Invalid time component specified")
     } else {
-        panic!("无效的格式");
+        panic!("Input format not recognized");
     }
 }
 
