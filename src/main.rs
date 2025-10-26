@@ -28,13 +28,6 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    let date = parse_datetime(cli.date_input, cli.lunar_date, !cli.no_next);
-
-    let output = if let Some(ref fmt) = cli.format {
-        date.format(fmt).to_string()
-    } else {
-        date.format("%Y-%m-%d %H:%M").to_string()
-    };
-
+    let output = parse_datetime(cli.date_input, cli.lunar_date, !cli.no_next, &cli.format);
     println!("{}", output);
 }

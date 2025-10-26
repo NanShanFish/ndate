@@ -3,11 +3,11 @@ use regex::{Match, Regex};
 use lazy_static::lazy_static;
 lazy_static! {
     static ref DATE_TIME_PAT: Regex = unsafe {
-        Regex::new(r"(?:(\d{2}{1,2})[/-])?(\d{1,2})[/-](\d{1,2})(?: (\d{1,2}):(\d{2}))?")
+        Regex::new(r"(?:\b(\d{2}{1,2})[/-])?\b(\d{1,2})[/-](\d{1,2})(?: (\d{1,2}):(\d{2}))?")
             .unwrap_unchecked()
     };
     static ref DELTA_TIME_PAT: Regex = unsafe {
-        Regex::new(r"([+-]?\d+)(?: (\d{1,2}):(\d{2}))?").unwrap_unchecked()
+        Regex::new(r"^([+-]?\d+)(?: (\d{1,2}):(\d{2}))?$").unwrap_unchecked()
     };
 }
 
@@ -27,9 +27,9 @@ fn hour_and_min(h_matched: Option<Match<'_>>, m_matched: Option<Match<'_>>) -> (
 fn date_from_ymd_and_hm(
     year: i32, month: u32, day: u32,
     hour: u32, minute: u32,
-    is_lunar: bool, next: bool, now: &DateTime<Local>
+    is_lunar: &bool, next: &bool, now: &DateTime<Local>
 ) -> DateTime<Local> {
-    if is_lunar {
+    if *is_lunar {
         let lunar_year = LunisolarYear::from_solar_year(SolarYear::from_u16(year as u16))
             .expect("Invalid lunar year");
         let is_leap_month = match lunar_year.get_leap_lunar_month() {
@@ -48,7 +48,7 @@ fn date_from_ymd_and_hm(
             .expect("Invalid hour or minute value");
         let res = Local.from_local_datetime(&native_datetime)
             .single().unwrap();
-        if next && res < *now {
+        if *next && res < *now {
             date_from_ymd_and_hm(year+1, month, day, hour, minute, is_lunar, next, now)
         } else {
             res
@@ -56,7 +56,7 @@ fn date_from_ymd_and_hm(
     } else {
         let res = Local.with_ymd_and_hms(year, month, day, hour, minute, 0)
             .single().expect("Invalid or out-of-range datetime provided" );
-        if next && res < *now {
+        if *next && res < *now {
             res.with_year(year + 1).expect("Year adjustment resulted in invalid datetime")
         } else {
             res
@@ -64,7 +64,15 @@ fn date_from_ymd_and_hm(
     }
 }
 
-pub fn parse_datetime(s: String, is_lunar: bool, next: bool) -> DateTime<Local> {
+fn datetime_to_string(datetime: DateTime<Local>, fstr: &Option<String>) -> String {
+    if let Some(fstr) = fstr {
+        datetime.format(fstr).to_string()
+    } else {
+        datetime.format("%Y-%m-%d %H:%M").to_string()
+    }
+}
+
+pub fn parse_datetime(s: String, is_lunar: bool, next: bool, fstr: &Option<String>) -> String  {
     let begin_of_today= Local::now()
         .with_hour(0)
         .and_then(|dt| dt.with_minute(0))
@@ -72,30 +80,7 @@ pub fn parse_datetime(s: String, is_lunar: bool, next: bool) -> DateTime<Local> 
         .and_then(|dt| dt.with_nanosecond(0))
         .unwrap();
 
-    if let Some(caps) = DATE_TIME_PAT.captures(&s) {
-        // \d{1,2} 转 int 不会失败
-        let month: u32 = unsafe { caps[2].parse().unwrap_unchecked() };
-        let day: u32 = unsafe { caps[3].parse().unwrap_unchecked() };
-        let need_next;
-        let year = match caps.get(1) {
-            // \d{2}{2} 转 int 不会失败
-            Some(matched) => {
-                let res = unsafe { matched.as_str().parse().unwrap_unchecked() };
-                need_next = false;
-                if res < 100 {
-                    2000 + res
-                } else {
-                    res
-                }
-            },
-            None => {
-                need_next = next;
-                begin_of_today.year()
-            }
-        };
-        let (hour, minute) = hour_and_min(caps.get(4), caps.get(5));
-        date_from_ymd_and_hm(year, month, day, hour, minute, is_lunar, need_next, &begin_of_today)
-    } else if let Some(caps) = DELTA_TIME_PAT.captures(&s) {
+    if let Some(caps) = DELTA_TIME_PAT.captures(&s) {
         let day_delta: i64 = unsafe { caps[1].parse().unwrap_unchecked() };
         let mut result = begin_of_today;
         let duration = Duration::days(day_delta);
@@ -103,11 +88,43 @@ pub fn parse_datetime(s: String, is_lunar: bool, next: bool) -> DateTime<Local> 
             .expect("Duration calculation overflowed");
 
         let (hour, minute) = hour_and_min(caps.get(2), caps.get(3));
-        result.with_hour(hour)
+        datetime_to_string(
+            result.with_hour(hour)
             .and_then(|dt| dt.with_minute(minute))
-            .expect("Invalid time component specified")
+            .expect("Invalid time component specified"),
+            fstr
+        )
     } else {
-        panic!("Input format not recognized");
+        let result = DATE_TIME_PAT.replace_all(&s, | caps: &regex::Captures |{
+            let month: u32 = unsafe { caps[2].parse().unwrap_unchecked() };
+            let day: u32 = unsafe { caps[3].parse().unwrap_unchecked() };
+            let need_next;
+            let year = match caps.get(1) {
+                // \d{2}{2} 转 int 不会失败
+                Some(matched) => {
+                    let res = unsafe { matched.as_str().parse().unwrap_unchecked() };
+                    need_next = false;
+                    if res < 100 {
+                        2000 + res
+                    } else {
+                        res
+                    }
+                },
+                None => {
+                    need_next = next;
+                    begin_of_today.year()
+                }
+            };
+            let (hour, minute) = hour_and_min(caps.get(4), caps.get(5));
+            datetime_to_string(
+                date_from_ymd_and_hm(
+                    year, month, day, hour, minute,
+                    &is_lunar, &need_next, &begin_of_today
+                ),
+                fstr
+            )
+        });
+        result.to_string()
     }
 }
 
@@ -126,31 +143,22 @@ mod tests {
         let s = format!("{}-{}", tmp.month(), tmp.day());
 
         assert_eq!(
-            unsafe{
-                Local.with_ymd_and_hms(2026, 1, 31, 0, 0, 0)
-                    .single().unwrap_unchecked()
-            },
-            parse_datetime(s.clone(), false, true)
+            String::from("2026-01-31 00:00"),
+            parse_datetime(s.clone(), false, true, &None)
         );
         assert_eq!(
-            unsafe{
-                Local.with_ymd_and_hms(2025, 1, 31, 0, 0, 0)
-                    .single().unwrap_unchecked()
-            },
-            parse_datetime(s, false, false)
+            String::from("2025-01-31 00:00"),
+            parse_datetime(s, false, false, &None)
         );
     }
 
     #[test]
     fn year_date_time() {
-        let s = String::from("2025-10-25 3:03");
+        let s = String::from("2025-10-25 03:03");
 
         assert_eq!(
-            unsafe{
-                Local.with_ymd_and_hms(2025, 10, 25, 3, 3, 0)
-                    .single().unwrap_unchecked()
-            },
-            parse_datetime(s, false, true)
+            s,
+            parse_datetime(s.clone(), false, true, &None)
         )
     }
 
@@ -160,11 +168,8 @@ mod tests {
         let now = Local::now();
 
         assert_eq!(
-            unsafe{
-                Local.with_ymd_and_hms(now.year(), 10, 25, 3, 3, 0)
-                    .single().unwrap_unchecked()
-            },
-            parse_datetime(s, false, true)
+            format!("{}-10-25 03:03", now.year()),
+            parse_datetime(s, false, true, &None)
         )
     }
 
@@ -180,8 +185,8 @@ mod tests {
             .checked_sub_signed(Duration::days(1)).unwrap();
 
         assert_eq!(
-            time,
-            parse_datetime(s, false, true)
+            format!("{}-{}-{} 00:00", time.year(), time.month(), time.day()),
+            parse_datetime(s, false, true, &None)
         )
     }
 
@@ -190,11 +195,8 @@ mod tests {
         let s = String::from("2024-2-30");
 
         assert_eq!(
-            unsafe{
-                Local.with_ymd_and_hms(2024, 4, 8, 0, 0, 0)
-                    .single().unwrap_unchecked()
-            },
-            parse_datetime(s, true, true)
+            String::from("2024-04-08 00:00"),
+            parse_datetime(s, true, true, &None)
         )
     }
 }
